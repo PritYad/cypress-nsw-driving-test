@@ -1,15 +1,12 @@
 /// <reference types="cypress" />
-const url = 'https://www.myrta.com/wps/portal/extvp/myrta/licence/tbs/tbs-change/!ut/p/b1/lc7fboIwFAbwZ_EBTP8p1MsiCN1EECyD3hBWWIODmm2OuLcf3pg';
-const id = "";
-const lname = '';
+const url = Cypress.env("loginUrl");
+const id = Cypress.env("bookingNumber"); // enter your booking number
+const lname = Cypress.env("lastName"); // enter your lastName
 const dateList = {};
 let bookedDate = '';
-const noBooking = 'There are no timeslots available for this week.';
-const selected = '.rms_timeSelPick td .selected';
 const datesId = '.rms_timeSelPick .rms_timeSelTitle th';
 const availableId = '.rms_timeSelPick td .available';
 const previousBTnId = 'span[id="prevWeekButton_label';
-const nextBTnId = 'span[id="nextWeekButton_label';
 let slots = [];
 const currentDate = new Date();
 const currentYear = currentDate.getFullYear();
@@ -22,10 +19,8 @@ const days = {
   5: `Fri`,
   6: `Sat`
 };
-const currentMonth = currentDate.getMonth() < 9 ? `0${currentDate.getMonth() + 1}` : `${currentDate.getMonth() + 1}`;
-const nearestDay = `${days[currentDate.getDay()]} ${currentDate.getDate()}/${currentMonth}`;
-
-const lessTrafficTimes = [
+let message = '';
+const timeList = [
   '9:30 am',
   '9:45 am',
   '10:00 am',
@@ -40,9 +35,9 @@ const lessTrafficTimes = [
   '1:00 pm',
   '1:30 pm',
   '1:45 pm',
-  '2:00 pm',
-  '2:15 pm'
+  '2:00 pm'
 ];
+const lessTrafficTimes = Cypress.env('avoidTrafficTime') ? timeList : [];
 
 describe('Actions', () => {
   it('.type() - type into a DOM element', () => {
@@ -51,20 +46,28 @@ describe('Actions', () => {
     cy.get('.dijitInputContainer input:first').click().clear().type(id).blur();
     cy.get('input[id="widget_input_familyName"]').click().clear().type(lname).blur();
     cy.get('span[id="submitNoLogin_label"]').click();
+    getBookingDate();
     cy.get('span[widgetid="changeTimeButton"]').click();
-
-    fetchDateList();
-    if (dateList !== undefined && dateList !== '' && dateList !== null) {
-      cy.get(selected).then((ele) => {
-        bookedDate = getSlotDate(ele[0].parentElement.className, ele[0].innerText);
-        console.log('booking date')
-        console.log(bookedDate);
-        findAvailableSlots();
-      });
-      goToPreviousWeek();
-    }
+    findAvailableSlots();
+    goToPreviousWeek();
   });
 });
+
+function getBookingDate() {
+  cy.get('table[summary="Details about the time and date of the test."] tr').then((ele) => {
+    if (ele.length) {
+      bookedDate = new Date(ele[0].querySelector('td').innerText);
+      let bookingTime = convertTime12to24(ele[1].querySelector('td').innerText).split(':');
+      bookedDate.setHours(bookingTime[0]);
+      bookedDate.setMinutes(bookingTime[1]);
+      console.log({
+        new: 'Your current booking date',
+        time: bookedDate
+      });
+    }
+  });
+
+}
 
 function findAvailableSlots() {
   cy.get('form[id="rms_testGroupWrapper"]').then((ele) => {
@@ -75,13 +78,19 @@ function findAvailableSlots() {
   });
 }
 
-function fetchAvailableSlots(ele) {
+function fetchAvailableSlots() {
   cy.get(availableId).then((ele) => {
     if (ele.toArray().length) {
       ele.toArray().forEach(element => {
         const aDate = getSlotDate(element.parentElement.className, element.innerText);
-        if (bookedDate > aDate && lessTrafficTimes.includes(element.innerText)) {
-          slots.push(`${aDate} ${element.innerText}`)
+        if (bookedDate > aDate) {
+          if (lessTrafficTimes.length === 0) {
+            slots.push(`${aDate.toLocaleString()}`);
+          } else if (
+            lessTrafficTimes.length > 0 &&
+            lessTrafficTimes.includes(element.innerText)) {
+            slots.push(`${aDate.toLocaleString()}`);
+          }
         }
       });
     }
@@ -90,38 +99,35 @@ function fetchAvailableSlots(ele) {
 }
 
 function goToPreviousWeek() {
-  var exists = Object.keys(dateList).some(function (k) {
-    return dateList[k] === nearestDay;
-  });
-  if (!exists) {
-    cy.get(previousBTnId).then(() => {
-      cy.get(previousBTnId).click();
-      fetchDateList();
-      findAvailableSlots();
-      goToPreviousWeek();
-    });
-  } else {
-    findAvailableSlots();
-    if (slots.length) {
-      console.log(slots);
-      const times = document.createDocumentFragment();
-      const heading = document.createElement("div");
-      heading.innerHTML = "Available booking slots are as below:\n";
-      times.appendChild(heading);
-      const ol = document.createElement("ol");
-      slots.forEach(ele => {
-        const li = document.createElement("li");
-        li.innerHTML = `${ele}\n`;
-        ol.appendChild(li);
+  cy.get('span[widgetid="prevWeekButton"]').then((ele) => {
+    if (!ele[0].querySelector('span[id="prevWeekButton"]').disabled) {
+      cy.get(previousBTnId).then(() => {
+        cy.get(previousBTnId).click();
+        fetchDateList();
+        findAvailableSlots();
+        goToPreviousWeek();
       });
-      times.appendChild(ol);
-      alert(times.textContent);
     } else {
-      alert(`No available booking found between ${lessTrafficTimes[0]} to ${lessTrafficTimes[lessTrafficTimes.length - 1]} before ${bookedDate}`);
+      findAvailableSlots();
+      if (slots.length) {
+        console.log(slots);
+        message = `Available booking slots are ${slots.join(';')}`;
+        alert(message);
+      } else {
+        message = `Sorry No available booking found before ${bookedDate}`;
+      }
+      cy.wait(500);
+      logout();
     }
-    logout();
-  }
+  });
 }
+
+function searchAnotherLocation() {
+  cy.get('a[id="anotherLocationLink"]').click();
+  cy.get('label[id="labelrms_batLocLocSel"]').click();
+  cy.get('select[id="rms_batLocationSelect2"]').click();
+}
+
 function logout() {
   cy.get('span[id="closeButton"]').click();
   cy.get('div[id="logoutConfirmPopup"]').as('logout');
@@ -144,4 +150,21 @@ function getSlotDate(className, innerText) {
     month: Number(dateOfBooking[2])
   }
   return new Date(`${currentYear}/${availableDate.month}/${availableDate.date} ${innerText}`);
+}
+
+
+const convertTime12to24 = (time12h) => {
+  const [time, modifier] = time12h.split(' ');
+
+  let [hours, minutes] = time.split(':');
+
+  if (hours === '12') {
+    hours = '00';
+  }
+
+  if (modifier.toUpperCase() === 'PM') {
+    hours = parseInt(hours, 10) + 12;
+  }
+
+  return `${hours}:${minutes}`;
 }

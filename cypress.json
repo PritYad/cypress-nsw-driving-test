@@ -1,3 +1,9 @@
 {
-  "projectId": "vtrk4m"
+  "projectId": "vtrk4m",
+  "env": {
+    "loginUrl": "https://www.myrta.com/wps/portal/extvp/myrta/licence/tbs/tbs-change/!ut/p/b1/lc7fboIwFAbwZ_EBTP8p1MsiCN1EECyD3hBWWIODmm2OuLcf3pg",
+    "bookingNumber": "",
+    "lastName": "",
+    "avoidTrafficTime": true
+  }
 }
